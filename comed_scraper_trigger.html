@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ComEd Queue Scraper – Chaberton Energy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a2340;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .wordmark {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: #f5c200;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      opacity: 0.85;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    }
+
+    .card-header {
+      text-align: center;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid #e8ecf2;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title { font-size: 18px; font-weight: 700; color: #1a2340; }
+    .card-sub { font-size: 12px; color: #6b7a99; margin-top: 4px; }
+
+    /* --- Button --- */
+    .run-btn {
+      width: 100%;
+      padding: 13px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #f5c200;
+      color: #1a2340;
+      border: none;
+      border-radius: 8px;
+      transition: background 0.15s, transform 0.1s;
+      letter-spacing: 0.01em;
+    }
+    .run-btn:hover:not(:disabled) { background: #e0b000; }
+    .run-btn:active:not(:disabled) { transform: scale(0.98); }
+    .run-btn:disabled { background: #f0d96e; color: #888; cursor: not-allowed; }
+
+    /* --- Loading area --- */
+    .loading-area {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 0 0.5rem;
+      gap: 1.25rem;
+    }
+    .loading-area.visible { display: flex; }
+
+    /* Orbital spinner */
+    .orbit-wrap {
+      position: relative;
+      width: 72px;
+      height: 72px;
+    }
+    .orbit-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid transparent;
+    }
+    .orbit-ring.r1 {
+      border-top-color: #f5c200;
+      animation: spin 1.1s linear infinite;
+    }
+    .orbit-ring.r2 {
+      inset: 10px;
+      border-top-color: #1a2340;
+      border-right-color: #1a234055;
+      animation: spin 0.75s linear infinite reverse;
+    }
+    .orbit-ring.r3 {
+      inset: 20px;
+      border-top-color: #f5c200aa;
+      animation: spin 1.5s linear infinite;
+    }
+    .orbit-dot {
+      position: absolute;
+      inset: 29px;
+      background: #1a2340;
+      border-radius: 50%;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a2340;
+      letter-spacing: 0.02em;
+    }
+
+    /* Progress bar */
+    .progress-track {
+      width: 100%;
+      height: 5px;
+      background: #e8ecf2;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #1a2340, #f5c200);
+      border-radius: 99px;
+      transition: width 1s linear;
+    }
+
+    .progress-pct {
+      font-size: 11px;
+      color: #9aa3bb;
+      text-align: right;
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    /* --- Status --- */
+    .status {
+      margin-top: 1rem;
+      font-size: 13px;
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: none;
+      line-height: 1.5;
+    }
+    .status.success { display: block; background: #e8f5e9; color: #1b5e20; border: 1px solid #81c784; }
+    .status.error   { display: block; background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; }
+
+    .last-run { font-size: 11px; color: #9aa3bb; margin-top: 1rem; text-align: center; }
+
+    .divider { border: none; border-top: 1px solid #e8ecf2; margin: 1.25rem 0; }
+    .footer { font-size: 11px; color: #6b7a99; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <div class="wordmark">Chaberton Energy</div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">ComEd Interconnection Queue</div>
+      <div class="card-sub">Scrapes latest data and refreshes the Excel report</div>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="triggerFlow()">🔄 &nbsp;Refresh ComEd Data</button>
+
+    <!-- Loading animation -->
+    <div class="loading-area" id="loadingArea">
+      <div class="orbit-wrap">
+        <div class="orbit-ring r1"></div>
+        <div class="orbit-ring r2"></div>
+        <div class="orbit-ring r3"></div>
+        <div class="orbit-dot"></div>
+      </div>
+      <div class="loading-label" id="loadingLabel">Triggering flow…</div>
+      <div style="width:100%">
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-pct" id="progressPct">0%</div>
+      </div>
+    </div>
+
+    <div class="status" id="statusBox"></div>
+    <div class="last-run" id="lastRun"></div>
+
+    <hr class="divider" />
+    <div class="footer">Chaberton Energy · Internal Tool</div>
+  </div>
+
+  <script>
+    const PA_URL = "https://default998958e7deeb4638b3f526886a7afd.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e9240a57180f4ea2aabbd9338383a988/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lT5Y0R90jUrS-7JKcq7Akd4C__8U4EYfSEcR3wkx6xY";
+    const WAIT_MS = 5 * 60 * 1000; // 5 minutes
+
+    const LABELS = [
+      "Triggering flow…",
+      "Launching scraper…",
+      "Connecting to ComEd…",
+      "Scraping queue data…",
+      "Processing pages…",
+      "Almost there…",
+      "Updating Excel…",
+      "Wrapping up…"
+    ];
+
+    const lastRun = localStorage.getItem('comed_last_run');
+    if (lastRun) document.getElementById('lastRun').textContent = 'Last triggered: ' + lastRun;
+
+    let progressInterval = null;
+
+    function startProgress() {
+      const fill = document.getElementById('progressFill');
+      const pct  = document.getElementById('progressPct');
+      const label = document.getElementById('loadingLabel');
+      const start = Date.now();
+      let labelIdx = 0;
+
+      // Advance label every ~37 seconds across 5 minutes
+      const labelInterval = setInterval(() => {
+        labelIdx = Math.min(labelIdx + 1, LABELS.length - 1);
+        label.textContent = LABELS[labelIdx];
+      }, WAIT_MS / LABELS.length);
+
+      progressInterval = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const percent = Math.min(Math.round((elapsed / WAIT_MS) * 100), 99);
+        fill.style.width = percent + '%';
+        pct.textContent = percent + '%';
+        if (elapsed >= WAIT_MS) {
+          clearInterval(progressInterval);
+          clearInterval(labelInterval);
+        }
+      }, 500);
+
+      return labelInterval;
+    }
+
+    async function triggerFlow() {
+      const btn = document.getElementById('runBtn');
+      const loadingArea = document.getElementById('loadingArea');
+      const statusBox = document.getElementById('statusBox');
+
+      btn.disabled = true;
+      statusBox.className = 'status';
+      statusBox.textContent = '';
+      loadingArea.classList.add('visible');
+
+      // Fire the PA request
+      let requestOk = false;
+      try {
+        const response = await fetch(PA_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'ceh_html_button', triggered_at: new Date().toISOString() })
+        });
+        requestOk = response.ok || response.status === 202;
+        if (!requestOk) {
+          throw new Error('HTTP ' + response.status);
+        }
+      } catch (e) {
+        loadingArea.classList.remove('visible');
+        statusBox.className = 'status error';
+        statusBox.textContent = '❌ Could not trigger the flow: ' + e.message + '. The sig= token may have expired — grab a fresh URL from Power Automate.';
+        btn.disabled = false;
+        return;
+      }
+
+      // Start the visual countdown
+      const labelInterval = startProgress();
+
+      // After 5 min, show success
+      setTimeout(() => {
+        clearInterval(labelInterval);
+        clearInterval(progressInterval);
+
+        // Snap bar to 100%
+        const fill = document.getElementById('progressFill');
+        const pct  = document.getElementById('progressPct');
+        fill.style.transition = 'width 0.4s ease';
+        fill.style.width = '100%';
+        pct.textContent = '100%';
+
+        setTimeout(() => {
+          loadingArea.classList.remove('visible');
+          statusBox.className = 'status success';
+          statusBox.textContent = '✅ Done! Your Excel file has been updated with the latest ComEd queue data.';
+          const now = new Date().toLocaleString();
+          document.getElementById('lastRun').textContent = 'Last triggered: ' + now;
+          localStorage.setItem('comed_last_run', now);
+          btn.disabled = false;
+        }, 500);
+
+      }, WAIT_MS);
+    }
+  </script>
+</body>
+</html>
