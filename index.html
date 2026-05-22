@@ -46,7 +46,6 @@
     .card-title { font-size: 18px; font-weight: 700; color: #1a2340; }
     .card-sub { font-size: 12px; color: #6b7a99; margin-top: 4px; }
 
-    /* --- Button --- */
     .run-btn {
       width: 100%;
       padding: 13px;
@@ -64,7 +63,6 @@
     .run-btn:active:not(:disabled) { transform: scale(0.98); }
     .run-btn:disabled { background: #f0d96e; color: #888; cursor: not-allowed; }
 
-    /* --- Loading area --- */
     .loading-area {
       display: none;
       flex-direction: column;
@@ -74,7 +72,6 @@
     }
     .loading-area.visible { display: flex; }
 
-    /* Orbital spinner */
     .orbit-wrap {
       position: relative;
       width: 72px;
@@ -116,7 +113,6 @@
       letter-spacing: 0.02em;
     }
 
-    /* Progress bar */
     .progress-track {
       width: 100%;
       height: 5px;
@@ -131,7 +127,6 @@
       border-radius: 99px;
       transition: width 1s linear;
     }
-
     .progress-pct {
       font-size: 11px;
       color: #9aa3bb;
@@ -140,7 +135,6 @@
       margin-top: 4px;
     }
 
-    /* --- Status --- */
     .status {
       margin-top: 1rem;
       font-size: 13px;
@@ -152,8 +146,26 @@
     .status.success { display: block; background: #e8f5e9; color: #1b5e20; border: 1px solid #81c784; }
     .status.error   { display: block; background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; }
 
-    .last-run { font-size: 11px; color: #9aa3bb; margin-top: 1rem; text-align: center; }
+    .excel-link {
+      display: none;
+      margin-top: 1rem;
+      width: 100%;
+      padding: 11px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      background: #1a2340;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .excel-link:hover { background: #253460; }
+    .excel-link.visible { display: block; }
 
+    .last-run { font-size: 11px; color: #9aa3bb; margin-top: 1rem; text-align: center; }
     .divider { border: none; border-top: 1px solid #e8ecf2; margin: 1.25rem 0; }
     .footer { font-size: 11px; color: #6b7a99; text-align: center; }
   </style>
@@ -170,7 +182,6 @@
 
     <button class="run-btn" id="runBtn" onclick="triggerFlow()">🔄 &nbsp;Refresh ComEd Data</button>
 
-    <!-- Loading animation -->
     <div class="loading-area" id="loadingArea">
       <div class="orbit-wrap">
         <div class="orbit-ring r1"></div>
@@ -188,6 +199,14 @@
     </div>
 
     <div class="status" id="statusBox"></div>
+
+    <a  id="excelLink"
+        class="excel-link"
+        href="https://chaberton.sharepoint.com/:x:/g/IQDkEm89NRspSJkNQvFpg7OkAXcL7MSjGTWXSVUFQ2sx2z0?e=Xv20Ms"
+        target="_blank">
+      📊 &nbsp;Open ComEd Queue Data
+    </a>
+
     <div class="last-run" id="lastRun"></div>
 
     <hr class="divider" />
@@ -196,7 +215,7 @@
 
   <script>
     const PA_URL = "https://default998958e7deeb4638b3f526886a7afd.25.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e9240a57180f4ea2aabbd9338383a988/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lT5Y0R90jUrS-7JKcq7Akd4C__8U4EYfSEcR3wkx6xY";
-    const WAIT_MS = 5 * 60 * 1000; // 5 minutes
+    const WAIT_MS = 5 * 60 * 1000;
 
     const LABELS = [
       "Triggering flow…",
@@ -215,13 +234,12 @@
     let progressInterval = null;
 
     function startProgress() {
-      const fill = document.getElementById('progressFill');
-      const pct  = document.getElementById('progressPct');
+      const fill  = document.getElementById('progressFill');
+      const pct   = document.getElementById('progressPct');
       const label = document.getElementById('loadingLabel');
       const start = Date.now();
       let labelIdx = 0;
 
-      // Advance label every ~37 seconds across 5 minutes
       const labelInterval = setInterval(() => {
         labelIdx = Math.min(labelIdx + 1, LABELS.length - 1);
         label.textContent = LABELS[labelIdx];
@@ -242,16 +260,17 @@
     }
 
     async function triggerFlow() {
-      const btn = document.getElementById('runBtn');
+      const btn        = document.getElementById('runBtn');
       const loadingArea = document.getElementById('loadingArea');
-      const statusBox = document.getElementById('statusBox');
+      const statusBox  = document.getElementById('statusBox');
+      const excelLink  = document.getElementById('excelLink');
 
       btn.disabled = true;
       statusBox.className = 'status';
       statusBox.textContent = '';
+      excelLink.classList.remove('visible');
       loadingArea.classList.add('visible');
 
-      // Fire the PA request
       let requestOk = false;
       try {
         const response = await fetch(PA_URL, {
@@ -260,9 +279,7 @@
           body: JSON.stringify({ source: 'ceh_html_button', triggered_at: new Date().toISOString() })
         });
         requestOk = response.ok || response.status === 202;
-        if (!requestOk) {
-          throw new Error('HTTP ' + response.status);
-        }
+        if (!requestOk) throw new Error('HTTP ' + response.status);
       } catch (e) {
         loadingArea.classList.remove('visible');
         statusBox.className = 'status error';
@@ -271,15 +288,12 @@
         return;
       }
 
-      // Start the visual countdown
       const labelInterval = startProgress();
 
-      // After 5 min, show success
       setTimeout(() => {
         clearInterval(labelInterval);
         clearInterval(progressInterval);
 
-        // Snap bar to 100%
         const fill = document.getElementById('progressFill');
         const pct  = document.getElementById('progressPct');
         fill.style.transition = 'width 0.4s ease';
@@ -290,6 +304,7 @@
           loadingArea.classList.remove('visible');
           statusBox.className = 'status success';
           statusBox.textContent = '✅ Done! Your Excel file has been updated with the latest ComEd queue data.';
+          excelLink.classList.add('visible');
           const now = new Date().toLocaleString();
           document.getElementById('lastRun').textContent = 'Last triggered: ' + now;
           localStorage.setItem('comed_last_run', now);
