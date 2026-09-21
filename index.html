@@ -177,7 +177,7 @@
   <div class="card">
     <div class="card-header">
       <div class="card-title">ComEd Interconnection Queue</div>
-      <div class="card-sub">Scrapes latest data and refreshes the Excel report</div>
+      <div class="card-sub">Scrapes the latest ComEd interconnection queue data</div>
     </div>
 
     <button class="run-btn" id="runBtn" onclick="triggerFlow()">🔄 &nbsp;Refresh ComEd Data</button>
@@ -200,11 +200,11 @@
 
     <div class="status" id="statusBox"></div>
 
-    <a  id="excelLink"
-        class="excel-link"
-        href="https://chaberton.sharepoint.com/:x:/g/IQDkEm89NRspSJkNQvFpg7OkAXcL7MSjGTWXSVUFQ2sx2z0?e=Xv20Ms"
-        target="_blank">
-      📊 &nbsp;Open ComEd Queue Data
+    <a  id="dataLink"
+      class="excel-link"
+      href="data.html"
+      target="_blank">
+      📊 &nbsp;View ComEd Queue Data
     </a>
 
     <div class="last-run" id="lastRun"></div>
@@ -224,7 +224,7 @@
       "Scraping queue data…",
       "Processing pages…",
       "Almost there…",
-      "Updating Excel…",
+      "Updating data…",
       "Wrapping up…"
     ];
 
@@ -303,7 +303,7 @@
         setTimeout(() => {
           loadingArea.classList.remove('visible');
           statusBox.className = 'status success';
-          statusBox.textContent = '✅ Done! Your Excel file has been updated with the latest ComEd queue data.';
+          statusBox.textContent = '✅ Done! The latest queue data is ready to view.';
           excelLink.classList.add('visible');
           const now = new Date().toLocaleString();
           document.getElementById('lastRun').textContent = 'Last triggered: ' + now;
