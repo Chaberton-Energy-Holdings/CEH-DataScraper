@@ -201,7 +201,7 @@
     <div class="status" id="statusBox"></div>
 
     <a  id="dataLink"
-      class="excel-link"
+      class="excel-link visible"
       href="data.html"
       target="_blank">
       📊 &nbsp;View ComEd Queue Data
@@ -268,7 +268,6 @@
       btn.disabled = true;
       statusBox.className = 'status';
       statusBox.textContent = '';
-      excelLink.classList.remove('visible');
       loadingArea.classList.add('visible');
 
       let requestOk = false;
