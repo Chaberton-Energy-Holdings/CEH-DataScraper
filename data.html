@@ -37,7 +37,7 @@
   let sortCol = null;
   let sortAsc = true;
 
-  fetch('data/comed_queue_data.json')
+  fetch('data/comed_queue_data.json?t=' + Date.now())
     .then(r => r.json())
     .then(json => {
       columns = json.columns;
