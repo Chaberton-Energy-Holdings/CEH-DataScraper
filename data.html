@@ -13,7 +13,22 @@
   input[type=text] { width: 100%; max-width: 320px; padding: 8px 12px; border: 1px solid #e8ecf2; border-radius: 6px; margin-bottom: 1rem; font-size: 13px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e8ecf2; white-space: nowrap; }
-  th { background: #1a2340; color: #fff; cursor: pointer; position: sticky; top: 0; }
+  thead tr:first-child th {
+   position: sticky;
+   top: 0;
+   z-index: 2;
+   background: #1a2340;
+   color: #fff;
+   cursor: pointer;
+   height: 36px;
+  }
+  thead tr:last-child th {
+   position: sticky;
+   top: 36px;
+   z-index: 1;
+   background: #fff;
+   padding: 4px 8px;
+  }
   tr:hover { background: #f7f9fc; }
   .table-wrap { max-height: 75vh; overflow: auto; border: 1px solid #e8ecf2; border-radius: 6px; }
 </style>
