@@ -22,20 +22,29 @@
 <div class="wrap">
   <h1>ComEd Interconnection Queue</h1>
   <div class="meta" id="meta">Loading…</div>
-  <input type="text" id="search" placeholder="Search…" />
+  <div style="display:flex; gap:8px; margin-bottom:1rem; flex-wrap:wrap;">
+    <input type="text" id="search" placeholder="Search all columns…" style="flex:1; min-width:200px; padding: 8px 12px; border: 1px solid #e8ecf2; border-radius: 6px; font-size: 13px;" />
+    <button onclick="exportToExcel()" style="padding:8px 14px; font-size:12px; border:1px solid #e8ecf2; border-radius:6px; background:#1a2340; color:#fff; cursor:pointer;">⬇ Export to Excel</button>
+    <button onclick="location.reload()" style="padding:8px 14px; font-size:12px; border:1px solid #e8ecf2; border-radius:6px; background:#fff; cursor:pointer;">↻ Reload</button>
+  </div>
   <div class="table-wrap">
     <table id="dataTable">
-      <thead><tr id="headerRow"></tr></thead>
+      <thead>
+        <tr id="headerRow"></tr>
+        <tr id="filterRow"></tr>
+      </thead>
       <tbody id="bodyRows"></tbody>
     </table>
   </div>
 </div>
 
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/xlsx.full.min.js"></script>
 <script>
   let rows = [];
   let columns = [];
   let sortCol = null;
   let sortAsc = true;
+  let columnFilters = {};
 
   fetch('data/comed_queue_data.json?t=' + Date.now())
     .then(r => r.json())
@@ -45,7 +54,7 @@
       document.getElementById('meta').textContent =
         `${json.total_records} records · scraped ${new Date(json.scraped_at).toLocaleString()}`;
       renderHeader();
-      render(rows);
+      render(currentFiltered());
     })
     .catch(e => {
       document.getElementById('meta').textContent = 'Could not load data: ' + e.message;
@@ -53,22 +62,45 @@
 
   function renderHeader() {
     const headerRow = document.getElementById('headerRow');
+    const filterRow = document.getElementById('filterRow');
     headerRow.innerHTML = '';
+    filterRow.innerHTML = '';
+
     columns.forEach(col => {
       const th = document.createElement('th');
-      th.textContent = col;
+      th.textContent = col + (sortCol === col ? (sortAsc ? ' ▲' : ' ▼') : '');
       th.onclick = () => {
         sortAsc = sortCol === col ? !sortAsc : true;
         sortCol = col;
+        renderHeader();
         render(currentFiltered());
       };
       headerRow.appendChild(th);
+
+      const filterTh = document.createElement('th');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Filter…';
+      input.style.cssText = 'width:100%; padding:4px 6px; font-size:12px; border:1px solid #e8ecf2; border-radius:4px;';
+      input.value = columnFilters[col] || '';
+      input.oninput = () => {
+        columnFilters[col] = input.value;
+        render(currentFiltered());
+      };
+      filterTh.appendChild(input);
+      filterRow.appendChild(filterTh);
     });
   }
 
   function currentFiltered() {
     const q = document.getElementById('search').value.toLowerCase();
-    return rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
+    return rows.filter(r => {
+      const matchesSearch = Object.values(r).some(v => String(v).toLowerCase().includes(q));
+      const matchesColumns = Object.entries(columnFilters).every(([col, val]) =>
+        !val || String(r[col] ?? '').toLowerCase().includes(val.toLowerCase())
+      );
+      return matchesSearch && matchesColumns;
+    });
   }
 
   function render(data) {
@@ -91,6 +123,14 @@
       });
       body.appendChild(tr);
     });
+  }
+
+  function exportToExcel() {
+    const data = currentFiltered();
+    const ws = XLSX.utils.json_to_sheet(data, { header: columns });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'ComEd Queue');
+    XLSX.writeFile(wb, 'comed_queue_' + new Date().toISOString().slice(0,10) + '.xlsx');
   }
 
   document.getElementById('search').addEventListener('input', () => render(currentFiltered()));
