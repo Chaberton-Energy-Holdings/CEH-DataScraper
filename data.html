@@ -139,13 +139,25 @@
       body.appendChild(tr);
     });
   }
+  const NUMERIC_COLUMNS = [
+   "Proposed Size (MW)",
+   "Substation Queue Position",
+   "Feeder Queue Position"
+  ];
 
   function exportToExcel() {
-    const data = currentFiltered();
-    const ws = XLSX.utils.json_to_sheet(data, { header: columns });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'ComEd Queue');
-    XLSX.writeFile(wb, 'comed_queue_' + new Date().toISOString().slice(0,10) + '.xlsx');
+   const data = currentFiltered().map(r => {
+    const copy = { ...r };
+    NUMERIC_COLUMNS.forEach(col => {
+     const n = parseFloat(String(copy[col] ?? '').replace(/,/g, ''));
+     copy[col] = isNaN(n) ? null : n;   // blank/non-numeric -> empty cell
+    });
+    return copy;
+   });
+   const ws = XLSX.utils.json_to_sheet(data, { header: columns });
+   const wb = XLSX.utils.book_new();
+   XLSX.utils.book_append_sheet(wb, ws, 'ComEd Queue');
+   XLSX.writeFile(wb, 'comed_queue_' + new Date().toISOString().slice(0,10) + '.xlsx');
   }
 
   document.getElementById('search').addEventListener('input', () => render(currentFiltered()));
