@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CEH Engineering KPI Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f3; color: #2c2c2a; padding: 0.75rem 1rem; }
+    h1 { font-size: 20px; font-weight: 500; margin-bottom: 1.5rem; color: #2c2c2a; }
+    .metric-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+    .metric-card { background: #fff; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.1); padding: 1rem; }
+    .metric-label { font-size: 12px; color: #888780; margin-bottom: 4px; }
+    .metric-value { font-size: 28px; font-weight: 500; color: #2c2c2a; line-height: 1.1; }
+    .chart-card { background: #fff; border-radius: 12px; border: 0.5px solid rgba(0,0,0,0.1); padding: 1.25rem; margin-bottom: 1.5rem; }
+    .chart-title { font-size: 14px; font-weight: 500; color: #2c2c2a; margin-bottom: 1rem; }
+    .legend-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #5f5e5a; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .timestamp { font-size: 12px; color: #b4b2a9; text-align: right; margin-top: 0.5rem; }
+    @media print {
+      @page { size: A4 landscape; margin: 0.5cm 0.75cm; }
+      body { background: #fff; padding: 0; font-size: 11px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      button { display: none !important; }
+      .metric-row { grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 0.75rem; }
+      .metric-card { padding: 0.5rem; border-radius: 6px; }
+      .metric-value { font-size: 20px; }
+      .metric-label { font-size: 10px; }
+      .chart-card { break-inside: avoid; padding: 0.5rem; margin-bottom: 0.4rem; border-radius: 8px; overflow: hidden; }
+      .hours-card { padding-bottom: 0 !important; }
+      .chart-title { font-size: 11px; margin-bottom: 0.4rem; }
+      .two-col { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+      canvas { max-width: 100% !important; height: auto !important; }
+      table { font-size: 10px; }
+      .legend-row { gap: 6px; margin-bottom: 4px; }
+      .legend-col { gap: 6px !important; }
+      .legend-item { font-size: 10px !important; }
+      .timestamp { font-size: 10px; }
+      div[style*="height:200px"] { height: 190px !important; }
+      div[style*="height:380px"] { height: 320px !important; }
+      div[style*="height:260px"] { height: 220px !important; }
+      .chart-card canvas { display: block; }
+      .chart-card { padding-bottom: 0.25rem !important; }
+
+    }
+    .legend-col { display: flex; flex-direction: column; gap: 10px; }
+    .legend-col .legend-item { font-size: 13px; }
+    .legend-col .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+    .chart-title { font-size: 15px; font-weight: 600; }
+    .hours-card { padding-bottom: 0 !important; overflow: hidden; }
+    .legend-item { font-size: 13px; }
+    .metric-label { font-size: 13px; }
+    @media (max-width: 600px) {
+      .metric-row { grid-template-columns: 1fr 1fr; }
+      .two-col { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:10px;">
+    <h1 style="margin-bottom:0;">CEH Engineering KPI Dashboard</h1>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <label for="asOfDate" style="font-size:13px; color:#5f5e5a;">View data as of:</label>
+      <input type="date" id="asOfDate" style="border:1px solid #d8d6d0; border-radius:6px; padding:6px 10px; font-size:13px; color:#2c2c2a;" />
+      <button id="resetDateBtn" style="background:#e8e6e1; color:#5f5e5a; border:none; border-radius:6px; padding:8px 12px; font-size:13px; font-weight:500; cursor:pointer;">Reset</button>
+      <button onclick="window.print()" style="background:#378ADD; color:#fff; border:none; border-radius:6px; padding:8px 16px; font-size:13px; font-weight:500; cursor:pointer;">Print / Save as PDF</button>
+    </div>
+  </div>
+  <p id="filterNotice" style="font-size:12px; color:#BA7517; margin-bottom:1rem; display:none;"></p>
+
+  <div class="metric-row">
+    <div class="metric-card"><p class="metric-label">Completed (last 24 mo)</p><p class="metric-value" id="m-total">—</p></div>
+    <div class="metric-card"><p class="metric-label">Avg per month</p><p class="metric-value" id="m-avg">—</p></div>
+    <div class="metric-card"><p class="metric-label">Active tasks</p><p class="metric-value" id="m-active">—</p></div>
+    <div class="metric-card" id="overdueCard"><p class="metric-label">Overdue active</p><p class="metric-value" id="m-overdue">—</p></div>
+  </div>
+
+  <div class="chart-card">
+    <p class="chart-title">All tasks completed by month (previous 24 months)</p>
+    <div style="position:relative; width:100%; height:320px;">
+      <canvas id="barChart" role="img" aria-label="Bar chart of tasks completed each month over the previous 24 months"></canvas>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="chart-card">
+      <p class="chart-title">Active project tasks by state</p>
+      <div style="display:flex; align-items:center; justify-content:center; gap:1.5rem;">
+        <div style="position:relative; flex:0 0 190px; width:190px; height:190px; overflow:hidden; border-radius:50%;">
+          <canvas id="stateChart" role="img" aria-label="Donut chart of active tasks by state"></canvas>
+        </div>
+        <div id="leg-state" class="legend-col"></div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <p class="chart-title">All active tasks by category</p>
+      <div style="display:flex; align-items:center; justify-content:center; gap:1.5rem;">
+        <div style="position:relative; flex:0 0 190px; width:190px; height:190px; overflow:hidden; border-radius:50%;">
+          <canvas id="catChart" role="img" aria-label="Donut chart of active tasks by category"></canvas>
+        </div>
+        <div id="leg-cat" class="legend-col"></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 2fr; gap:1.5rem; margin-bottom:1.5rem;">
+    <div class="chart-card hours-card">
+      <p class="chart-title" id="activeHoursTitle">Total hours for active tasks</p>
+      <div style="display:flex; align-items:center; gap:1.5rem;">
+        <div style="position:relative; flex:0 0 180px; width:180px; height:320px;">
+          <canvas id="activeHoursChart"></canvas>
+        </div>
+        <div id="leg-active-hours" class="legend-col"></div>
+      </div>
+    </div>
+    <div class="chart-card hours-card">
+      <p class="chart-title" id="completedHoursTitle">Hours for completed tasks (last 3 months)</p>
+      <div style="display:flex; align-items:center; gap:1.5rem;">
+        <div style="position:relative; flex:1; height:320px;">
+          <canvas id="completedHoursChart"></canvas>
+        </div>
+        <div id="leg-completed-hours" class="legend-col"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <p class="chart-title">Average business days to complete design stage tasks (last 4 months, excluding &gt;30 business days)</p>
+    <div style="position:relative; width:100%; height:320px;">
+      <canvas id="avgDaysChart" role="img" aria-label="Bar chart of average days to complete by design stage"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <p class="chart-title">Last 4 months — tasks &gt;30 business days to complete</p>
+    <table id="slowTasksTable" style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500;">Task</th>
+          <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500;">Stage</th>
+          <th style="text-align:right; padding:6px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500;">Business Days to Complete</th>
+        </tr>
+      </thead>
+      <tbody id="slowTasksBody"></tbody>
+    </table>
+  </div>
+
+  <div class="two-col" style="margin-bottom:1.5rem;">
+    <div class="chart-card" style="padding-bottom:0.5rem;">
+      <p class="chart-title" id="lastWeekTitle">Last Week</p>
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:5px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500;">Task</th>
+            <th style="text-align:right; padding:5px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500; white-space:nowrap;">Due Date</th>
+          </tr>
+        </thead>
+        <tbody id="lastWeekBody"></tbody>
+      </table>
+    </div>
+    <div class="chart-card" style="padding-bottom:0.5rem;">
+      <p class="chart-title" id="thisWeekTitle">This Week</p>
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:5px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500;">Task</th>
+            <th style="text-align:right; padding:5px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500; white-space:nowrap;">Due Date</th>
+          </tr>
+        </thead>
+        <tbody id="thisWeekBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:1.5rem;">
+    <p class="chart-title" id="overdueListTitle">Overdue Active Tasks</p>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500;">Task</th>
+          <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500;">State</th>
+          <th style="text-align:right; padding:6px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500; white-space:nowrap;">Due Date</th>
+          <th style="text-align:right; padding:6px 8px; border-bottom:1px solid #e0deda; color:#888780; font-weight:500; white-space:nowrap;">Days Overdue</th>
+        </tr>
+      </thead>
+      <tbody id="overdueListBody"></tbody>
+    </table>
+  </div>
+
+  <p class="timestamp" id="last-updated"></p>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script>
+
+    // =============================================================
+    // DATA — replaced by Power Automate on each refresh
+    // =============================================================
+    let TASK_DATA = [];          // filled from data/kpi_tasks.json
+    let LAST_UPDATED = null;     // filled from data/kpi_tasks.json
+    let CURRENT_DATA = TASK_DATA;
+    let CURRENT_ASOF_DATE = null; // null = use real today; otherwise Date object for the filter cutoff
+    // =============================================================
+
+    // Fixed category config — consistent colors, only shown if tasks present
+    const CAT_CONFIG = [
+      { key: "Stage: Conceptual",  color: "#378ADD" },
+      { key: "Stage: 10% Design",  color: "#1D9E75" },
+      { key: "Stage: 20% Design",  color: "#BA7517" },
+      { key: "Stage: 30% Design",  color: "#7F77DD" },
+      { key: "Misc.",              color: "#D85A30" }
+    ];
+
+    // Dynamic state color palette
+    const STATE_PALETTE = ["#378ADD","#D85A30","#1D9E75","#7F77DD","#BA7517","#888780","#E24B4A","#0F6E56"];
+
+    // Hours per task by category
+    const HOURS_MAP = {
+      "Stage: Conceptual":  20,
+      "Stage: 10% Design":  36,
+      "Stage: 20% Design":  60,
+      "Stage: 30% Design":  80,
+      "Misc.":               8
+    };
+
+    function getHours(task) {
+      return HOURS_MAP[getCategory(task)] || 8;
+    }
+
+    // Resolve category from labels array — find first "Stage:..." label, else Misc.
+    function getCategory(task) {
+      if (!task.labels || task.labels.length === 0) return "Misc.";
+      const stageLabel = task.labels.find(l => l && l.startsWith("Stage:"));
+      return stageLabel || "Misc.";
+    }
+
+    function centerTextPlugin(id, total) {
+      return {
+        id,
+        afterDraw(chart) {
+          const { ctx, chartArea: { left, right, top, bottom } } = chart;
+          const cx = (left + right) / 2, cy = (top + bottom) / 2;
+          ctx.save();
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = "#888780"; ctx.font = "13px sans-serif";
+          ctx.fillText("Total", cx, cy - 12);
+          ctx.fillStyle = "#2c2c2a"; ctx.font = "600 26px sans-serif";
+          ctx.fillText(total, cx, cy + 8);
+          ctx.restore();
+        }
+      };
+    }
+
+    function buildLegend(elId, labels, colors, values, total, vertical=false) {
+      const el = document.getElementById(elId);
+      el.innerHTML = "";
+      labels.forEach((l, i) => {
+        const pct = total > 0 ? Math.round(values[i] / total * 100) : 0;
+        const cls = vertical ? "legend-item" : "legend-item";
+        el.innerHTML += `<span class="${cls}" style="display:flex;align-items:center;gap:6px;font-size:13px;color:#5f5e5a;"><span class="legend-dot" style="background:${colors[i]};width:12px;height:12px;border-radius:3px;flex-shrink:0;"></span>${l} <strong>${pct}%</strong></span>`;
+      });
+    }
+
+    function buildDash() {
+      // Destroy existing chart instances before rebuilding (needed for re-filtering)
+      ['barChart','stateChart','catChart','activeHoursChart','completedHoursChart','avgDaysChart'].forEach(function(id) {
+        var existing = Chart.getChart(id);
+        if (existing) existing.destroy();
+      });
+
+      const now = CURRENT_ASOF_DATE ? new Date(CURRENT_ASOF_DATE) : new Date();
+      const cutoff = new Date(now);
+      cutoff.setMonth(cutoff.getMonth() - 24);
+
+      // Compute overdue status LIVE using "now" rather than trusting the
+      // taskOverdue value baked into the data at whatever time Power Automate
+      // last ran. A task is overdue starting the day AFTER its due date.
+      function isOverdueLive(task) {
+        if (task.progress === "Completed" || !task.dueDateTime) return false;
+        const dueDateOnly = new Date(task.dueDateTime);
+        dueDateOnly.setHours(0, 0, 0, 0);
+        const nowDateOnly = new Date(now);
+        nowDateOnly.setHours(0, 0, 0, 0);
+        return dueDateOnly < nowDateOnly;
+      }
+
+      const completed = CURRENT_DATA.filter(t =>
+        t.progress === "Completed" && t.completedDateTime && new Date(t.completedDateTime) >= cutoff
+      );
+      const active = CURRENT_DATA.filter(t => t.progress !== "Completed");
+      const overdue = active.filter(isOverdueLive);
+
+      document.getElementById("m-total").textContent = completed.length;
+      document.getElementById("m-avg").textContent = Math.round(completed.length / 24);
+      document.getElementById("m-active").textContent = active.length;
+      document.getElementById("m-overdue").textContent = overdue.length;
+
+      // Color-code the overdue card: green <=5, yellow 6-10, red >10
+      const overdueCard = document.getElementById("overdueCard");
+      const overdueValue = document.getElementById("m-overdue");
+      if (overdue.length <= 5) {
+        overdueCard.style.background = "#eaf7ef";
+        overdueCard.style.borderColor = "#a8ddbb";
+        overdueValue.style.color = "#1D9E75";
+      } else if (overdue.length <= 10) {
+        overdueCard.style.background = "#fef8e8";
+        overdueCard.style.borderColor = "#f0d896";
+        overdueValue.style.color = "#BA7517";
+      } else {
+        overdueCard.style.background = "#fbeae7";
+        overdueCard.style.borderColor = "#f0b5a8";
+        overdueValue.style.color = "#D85A30";
+      }
+
+      // --- Bar chart ---
+      const months = [];
+      for (let i = 23; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({ label: d.toLocaleString("default", { month: "short" }), month: d.getMonth(), year: d.getFullYear(), count: 0 });
+      }
+      completed.forEach(t => {
+        const d = new Date(t.completedDateTime);
+        const m = months.find(m => m.month === d.getMonth() && m.year === d.getFullYear());
+        if (m) m.count++;
+      });
+      const xLabels = months.map((m, i) =>
+        (i === 0 || months[i].year !== months[i - 1].year) ? [m.label, String(m.year)] : m.label
+      );
+
+      new Chart(document.getElementById("barChart"), {
+        type: "bar",
+        data: {
+          labels: xLabels,
+          datasets: [{ label: "Completed", data: months.map(m => m.count), backgroundColor: "#378ADD", borderRadius: 3, borderSkipped: false }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { right: -10 } },
+          plugins: {
+            legend: { display: false, labels: { boxWidth: 0, padding: 0 } }
+          },
+          scales: {
+            x: {
+              ticks: { autoSkip: false, maxRotation: 0, font: { size: 13 }, color: "#888780" },
+              grid: { display: false },
+              afterFit: function(scale) { scale.paddingRight = 0; scale.paddingLeft = 4; }
+            },
+            y: { ticks: { font: { size: 13 }, color: "#888780" }, grid: { color: "rgba(136,135,128,0.15)" } }
+          }
+        }
+      });
+
+      // --- State donut (dynamic — only design stage tasks with a taskState) ---
+      const stateCounts = {};
+      active.forEach(t => { if (t.taskState && t.taskState !== "") stateCounts[t.taskState] = (stateCounts[t.taskState] || 0) + 1; });
+      const stateLabels = Object.keys(stateCounts).sort();
+      const stateData = stateLabels.map(k => stateCounts[k]);
+      const stateColors = stateLabels.map((_, i) => STATE_PALETTE[i % STATE_PALETTE.length]);
+      const stateTotal = stateData.reduce((a, b) => a + b, 0);
+
+      buildLegend("leg-state", stateLabels, stateColors, stateData, stateTotal, true);
+      new Chart(document.getElementById("stateChart"), {
+        type: "doughnut",
+        data: { labels: stateLabels, datasets: [{ data: stateData, backgroundColor: stateColors, borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: "55%", plugins: { legend: { display: false } } },
+        plugins: [centerTextPlugin("ct-state", stateTotal)]
+      });
+
+      // --- Category donut (fixed order, only present categories, all active tasks) ---
+      const catFiltered = CAT_CONFIG.filter(c => active.some(t => getCategory(t) === c.key));
+      const catLabels = catFiltered.map(c => c.key);
+      const catData = catFiltered.map(c => active.filter(t => getCategory(t) === c.key).length);
+      const catColors = catFiltered.map(c => c.color);
+      const catTotal = catData.reduce((a, b) => a + b, 0);
+
+      buildLegend("leg-cat", catLabels, catColors, catData, catTotal, true);
+      new Chart(document.getElementById("catChart"), {
+        type: "doughnut",
+        data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: "55%", plugins: { legend: { display: false } } },
+        plugins: [centerTextPlugin("ct-cat", catTotal)]
+      });
+
+      // --- Active hours stacked bar ---
+      const activeHoursTotal = active.reduce((sum, t) => sum + getHours(t), 0);
+      document.getElementById("activeHoursTitle").textContent = `Total hours for active tasks (${activeHoursTotal.toLocaleString()} hrs)`;
+
+      const activeHoursData = CAT_CONFIG.map(c => ({
+        label: c.key,
+        color: c.color,
+        value: active.filter(t => getCategory(t) === c.key).reduce((sum, t) => sum + getHours(t), 0)
+      })).filter(d => d.value > 0);
+
+      const legActiveHours = document.getElementById("leg-active-hours");
+      legActiveHours.innerHTML = "";
+      activeHoursData.forEach(d => {
+        legActiveHours.innerHTML += `<span class="legend-item"><span class="legend-dot" style="background:${d.color}"></span>${d.label}</span>`;
+      });
+
+      new Chart(document.getElementById("activeHoursChart"), {
+        type: "bar",
+        data: {
+          labels: ["Total"],
+          datasets: activeHoursData.map(d => ({
+            label: d.label,
+            data: [d.value],
+            backgroundColor: d.color,
+            borderWidth: 0
+          }))
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: 0 },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} hrs` } }
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { color: "#888780", font: { size: 13 } }, border: { display: false } },
+            y: { stacked: true, ticks: { color: "#888780", font: { size: 13 } }, grid: { color: "rgba(136,135,128,0.15)" }, border: { display: false } }
+          }
+        },
+        plugins: [{
+          id: "barLabels",
+          afterDatasetsDraw(chart) {
+            const { ctx } = chart;
+            chart.data.datasets.forEach((ds, i) => {
+              const meta = chart.getDatasetMeta(i);
+              meta.data.forEach(bar => {
+                if (ds.data[0] > 0) {
+                  ctx.save();
+                  ctx.fillStyle = "#fff";
+                  ctx.font = "500 11px sans-serif";
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "middle";
+                  ctx.fillText(ds.data[0].toLocaleString(), bar.x, bar.y + (bar.height / 2));
+                  ctx.restore();
+                }
+              });
+            });
+          }
+        }]
+      });
+
+      // --- Completed hours stacked bar (last 3 months + current) ---
+      const last4Months = [];
+      for (let i = 3; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        last4Months.push({ label: d.toLocaleString("default", { month: "short" }), month: d.getMonth(), year: d.getFullYear() });
+      }
+
+      const recentCompleted = CURRENT_DATA.filter(t => {
+        if (t.progress !== "Completed" || !t.completedDateTime) return false;
+        const d = new Date(t.completedDateTime);
+        return last4Months.some(m => m.month === d.getMonth() && m.year === d.getFullYear());
+      });
+
+      const completedHoursTotal = recentCompleted.reduce((sum, t) => sum + getHours(t), 0);
+      document.getElementById("completedHoursTitle").textContent = `Hours for completed tasks — last 3 months (${completedHoursTotal.toLocaleString()} hrs)`;
+
+      const completedDatasets = CAT_CONFIG.map(c => ({
+        label: c.key,
+        color: c.color,
+        data: last4Months.map(m => {
+          return recentCompleted
+            .filter(t => {
+              const d = new Date(t.completedDateTime);
+              return d.getMonth() === m.month && d.getFullYear() === m.year && getCategory(t) === c.key;
+            })
+            .reduce((sum, t) => sum + getHours(t), 0);
+        })
+      })).filter(d => d.data.some(v => v > 0));
+
+      const legCompletedHours = document.getElementById("leg-completed-hours");
+      legCompletedHours.innerHTML = "";
+      completedDatasets.forEach(d => {
+        legCompletedHours.innerHTML += `<span class="legend-item"><span class="legend-dot" style="background:${d.color}"></span>${d.label}</span>`;
+      });
+
+      new Chart(document.getElementById("completedHoursChart"), {
+        type: "bar",
+        data: {
+          labels: last4Months.map(m => m.label),
+          datasets: completedDatasets.map(d => ({
+            label: d.label,
+            data: d.data,
+            backgroundColor: d.color,
+            borderWidth: 0
+          }))
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: 0 },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} hrs` } }
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { color: "#888780", font: { size: 13 } }, border: { display: false } },
+            y: { stacked: true, ticks: { color: "#888780", font: { size: 13 } }, grid: { color: "rgba(136,135,128,0.15)" }, border: { display: false } }
+          }
+        }
+      });
+
+
+      // --- Avg days to complete by stage (last 4 months, exclude >30 days) ---
+      const STAGE_CATS = ['Stage: Conceptual','Stage: 10% Design','Stage: 20% Design','Stage: 30% Design'];
+      const STAGE_COLORS = {
+        'Stage: Conceptual': '#378ADD',
+        'Stage: 10% Design': '#1D9E75',
+        'Stage: 20% Design': '#BA7517',
+        'Stage: 30% Design': '#7F77DD'
+      };
+
+      // Count business days (Mon-Fri) between two dates, excluding weekends
+      function businessDaysBetween(start, end) {
+        var startDate = new Date(start);
+        var endDate = new Date(end);
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(0, 0, 0, 0);
+        if (endDate <= startDate) return 0;
+
+        var count = 0;
+        var cur = new Date(startDate);
+        while (cur < endDate) {
+          cur.setDate(cur.getDate() + 1);
+          var dow = cur.getDay(); // 0 = Sun, 6 = Sat
+          if (dow !== 0 && dow !== 6) count++;
+        }
+        return count;
+      }
+
+      const last4Completed = CURRENT_DATA.filter(t => {
+        if (t.progress !== 'Completed' || !t.completedDateTime || !t.createdDateTime) return false;
+        const d = new Date(t.completedDateTime);
+        return last4Months.some(m => m.month === d.getMonth() && m.year === d.getFullYear());
+      });
+
+      const stageTasks = last4Completed.filter(t => STAGE_CATS.includes(getCategory(t))).map(t => {
+        const days = businessDaysBetween(t.createdDateTime, t.completedDateTime);
+        return Object.assign({}, t, { days: days, cat: getCategory(t) });
+      });
+
+      const under30 = stageTasks.filter(t => t.days <= 30);
+      const over30  = stageTasks.filter(t => t.days > 30);
+
+      const avgData = STAGE_CATS.map(cat => {
+        const tasks = under30.filter(t => t.cat === cat);
+        if (tasks.length === 0) return null;
+        const avg = Math.round((tasks.reduce((s, t) => s + t.days, 0) / tasks.length) * 10) / 10;
+        return { cat: cat, avg: avg, color: STAGE_COLORS[cat] };
+      }).filter(d => d !== null);
+
+      const TARGET_DAYS = {
+        'Stage: Conceptual':  7,
+        'Stage: 10% Design':  10,
+        'Stage: 20% Design':  14,
+        'Stage: 30% Design':  21
+      };
+
+      new Chart(document.getElementById('avgDaysChart'), {
+        type: 'bar',
+        data: {
+          labels: avgData.map(d => [d.cat, '(Target ' + TARGET_DAYS[d.cat] + ' Days)']),
+          datasets: [{
+            data: avgData.map(d => d.avg),
+            backgroundColor: avgData.map(d => d.color),
+            borderRadius: 3,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 4, bottom: 0, left: 0, right: 0 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: function(ctx) { return ' ' + ctx.raw + ' business days'; } } }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#888780', font: { size: 13 }, padding: 4 }, border: { display: false } },
+            y: { ticks: { color: '#888780', font: { size: 13 } }, grid: { color: 'rgba(136,135,128,0.15)' }, border: { display: false } }
+          }
+        },
+        plugins: [{
+          id: 'avgBarLabels',
+          afterDatasetsDraw: function(chart) {
+            var ctx = chart.ctx;
+            chart.getDatasetMeta(0).data.forEach(function(bar, i) {
+              ctx.save();
+              ctx.fillStyle = '#fff';
+              ctx.font = '500 12px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(avgData[i].avg, bar.x, bar.y + (bar.height / 2));
+              ctx.restore();
+            });
+          }
+        }]
+      });
+
+      // --- Over 30 days table ---
+      var tbody = document.getElementById('slowTasksBody');
+      if (over30.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="padding:12px 8px; color:#888780; text-align:center;">No tasks over 30 days in the last 4 months</td></tr>';
+      } else {
+        var over30Html = '';
+        over30.sort(function(a, b) { return b.days - a.days; }).forEach(function(t, i) {
+          var bg = i % 2 === 0 ? '#fff' : '#f9f9f7';
+          var row = '<tr style="background:' + bg + '">';
+          row += '<td style="padding:6px 8px; border-bottom:1px solid #f0ede8;">' + t.title + '</td>';
+          row += '<td style="padding:6px 8px; border-bottom:1px solid #f0ede8; color:#5f5e5a;">' + t.cat + '</td>';
+          row += '<td style="padding:6px 8px; border-bottom:1px solid #f0ede8; text-align:right; font-weight:500;">' + t.days + '</td>';
+          row += '</tr>';
+          over30Html += row;
+        });
+        tbody.innerHTML = over30Html;
+      }
+
+
+      // --- Weekly tasks tables ---
+      // Current week = Mon-Sun of the current week (shown as "Last Week")
+      // Next week = Mon-Sun of next week (shown as "This Week")
+      function getWeekBounds(offsetWeeks) {
+        var d = new Date(now);
+        var day = d.getDay(); // 0=Sun, 1=Mon...
+        var diffToMon = (day === 0) ? -6 : 1 - day;
+        var mon = new Date(d);
+        mon.setDate(d.getDate() + diffToMon + (offsetWeeks * 7));
+        mon.setHours(0, 0, 0, 0);
+        var sun = new Date(mon);
+        sun.setDate(mon.getDate() + 6);
+        sun.setHours(23, 59, 59, 999);
+        return { start: mon, end: sun };
+      }
+
+      function formatDate(dateStr) {
+        if (!dateStr) return '';
+        var d = new Date(dateStr);
+        return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+      }
+
+      function formatWeekLabel(bounds) {
+        var opts = { month: '2-digit', day: '2-digit', year: 'numeric' };
+        return bounds.start.toLocaleDateString('en-US', opts) + ' – ' + bounds.end.toLocaleDateString('en-US', opts);
+      }
+
+      function buildWeeklyTable(bodyId, bounds) {
+        var tasks = CURRENT_DATA.filter(function(t) {
+          if (!t.dueDateTime) return false;
+          var due = new Date(t.dueDateTime);
+          return due >= bounds.start && due <= bounds.end;
+        });
+
+        var completed = tasks.filter(function(t) { return t.progress === 'Completed'; })
+          .sort(function(a, b) { return new Date(a.dueDateTime) - new Date(b.dueDateTime); });
+        var ongoing = tasks.filter(function(t) { return t.progress !== 'Completed'; })
+          .sort(function(a, b) { return new Date(a.dueDateTime) - new Date(b.dueDateTime); });
+
+        var tbody = document.getElementById(bodyId);
+        var html = '';
+
+        // Completed group
+        html += '<tr><td colspan="2" style="padding:6px 8px 2px; font-weight:600; font-size:12px; color:#2c2c2a; border-bottom:1px solid #e0deda;">Completed ✅</td></tr>';
+        if (completed.length === 0) {
+          html += '<tr><td colspan="2" style="padding:4px 8px; color:#888780; font-size:12px; font-style:italic;">None</td></tr>';
+        } else {
+          completed.forEach(function(t, i) {
+            var bg = i % 2 === 0 ? '#fff' : '#f9f9f7';
+            html += '<tr style="background:' + bg + '">';
+            html += '<td style="padding:4px 8px; border-bottom:1px solid #f0ede8; text-decoration:line-through; color:#888780;">' + t.title + '</td>';
+            html += '<td style="padding:4px 8px; border-bottom:1px solid #f0ede8; text-align:right; color:#888780; white-space:nowrap; text-decoration:line-through;">' + formatDate(t.dueDateTime) + '</td>';
+            html += '</tr>';
+          });
+        }
+
+        // Spacer
+        html += '<tr><td colspan="2" style="padding:4px;"></td></tr>';
+
+        // Ongoing group
+        html += '<tr><td colspan="2" style="padding:6px 8px 2px; font-weight:600; font-size:12px; color:#2c2c2a; border-bottom:1px solid #e0deda;">On Going ⏳</td></tr>';
+        if (ongoing.length === 0) {
+          html += '<tr><td colspan="2" style="padding:4px 8px; color:#888780; font-size:12px; font-style:italic;">None</td></tr>';
+        } else {
+          ongoing.forEach(function(t, i) {
+            var bg = i % 2 === 0 ? '#fff' : '#f9f9f7';
+            var overdue = isOverdueLive(t);
+            html += '<tr style="background:' + bg + '">';
+            html += '<td style="padding:4px 8px; border-bottom:1px solid #f0ede8; color:' + (overdue ? '#D85A30' : '#2c2c2a') + ';">' + t.title + '</td>';
+            html += '<td style="padding:4px 8px; border-bottom:1px solid #f0ede8; text-align:right; white-space:nowrap; color:' + (overdue ? '#D85A30' : '#2c2c2a') + ';">' + formatDate(t.dueDateTime) + '</td>';
+            html += '</tr>';
+          });
+        }
+
+        tbody.innerHTML = html;
+      }
+
+      var currentWeekBounds = getWeekBounds(0);
+      var nextWeekBounds = getWeekBounds(1);
+
+      document.getElementById('lastWeekTitle').textContent = 'Last Week: ' + formatWeekLabel(currentWeekBounds);
+      document.getElementById('thisWeekTitle').textContent = 'This Week: ' + formatWeekLabel(nextWeekBounds);
+
+      buildWeeklyTable('lastWeekBody', currentWeekBounds);
+      buildWeeklyTable('thisWeekBody', nextWeekBounds);
+
+      // --- Overdue active tasks list ---
+      // Uses the same live isOverdueLive() check and respects the "now" reference,
+      // which shifts with the date filter (CURRENT_ASOF_DATE) automatically.
+      const overdueList = active.filter(isOverdueLive).map(function(t) {
+        const dueDateOnly = new Date(t.dueDateTime);
+        dueDateOnly.setHours(0, 0, 0, 0);
+        const nowDateOnly = new Date(now);
+        nowDateOnly.setHours(0, 0, 0, 0);
+        const daysOverdue = Math.round((nowDateOnly - dueDateOnly) / (1000 * 60 * 60 * 24));
+        return Object.assign({}, t, { daysOverdue: daysOverdue });
+      }).sort(function(a, b) { return b.daysOverdue - a.daysOverdue; });
+
+      const overdueListTitle = document.getElementById('overdueListTitle');
+      overdueListTitle.textContent = 'Overdue Active Tasks (' + overdueList.length + ')';
+
+      const overdueListBody = document.getElementById('overdueListBody');
+      if (overdueList.length === 0) {
+        overdueListBody.innerHTML = '<tr><td colspan="4" style="padding:12px 8px; color:#888780; text-align:center;">No overdue active tasks</td></tr>';
+      } else {
+        let overdueListHtml = '';
+        overdueList.forEach(function(t, i) {
+          const bg = i % 2 === 0 ? '#fff' : '#f9f9f7';
+          overdueListHtml += '<tr style="background:' + bg + '">';
+          overdueListHtml += '<td style="padding:6px 8px; border-bottom:1px solid #f0ede8;">' + t.title + '</td>';
+          overdueListHtml += '<td style="padding:6px 8px; border-bottom:1px solid #f0ede8; color:#5f5e5a;">' + (t.taskState || '') + '</td>';
+          overdueListHtml += '<td style="padding:6px 8px; border-bottom:1px solid #f0ede8; text-align:right; white-space:nowrap;">' + formatDate(t.dueDateTime) + '</td>';
+          overdueListHtml += '<td style="padding:6px 8px; border-bottom:1px solid #f0ede8; text-align:right; font-weight:500; color:#D85A30;">' + t.daysOverdue + '</td>';
+          overdueListHtml += '</tr>';
+        });
+        overdueListBody.innerHTML = overdueListHtml;
+      }
+
+      // --- Timestamp ---
+      const lu = new Date(LAST_UPDATED);
+      document.getElementById("last-updated").textContent =
+        `Last updated: ${lu.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })} at ${lu.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" })}`;
+    }
+
+    // --- Date filter wiring ---
+    // Reconstruct a task's state as of a given cutoff date, using the fact that
+    // task lifecycle only moves forward (not started -> in progress -> completed).
+    function reconstructAsOf(task, cutoff) {
+      // Task didn't exist yet as of this date
+      if (!task.createdDateTime || new Date(task.createdDateTime) > cutoff) return null;
+
+      var wasCompletedByThen = task.completedDateTime && new Date(task.completedDateTime) <= cutoff;
+
+      var reconstructed = Object.assign({}, task);
+
+      if (wasCompletedByThen) {
+        reconstructed.progress = 'Completed';
+        // completedDateTime stays as-is since it already happened on/before cutoff
+      } else {
+        // Task was still active as of this date — clear completion info
+        reconstructed.progress = task.progress === 'Completed' ? 'In Progress' : task.progress;
+        reconstructed.completedDateTime = null;
+
+        // Recalculate overdue status as of the cutoff date rather than today
+        // A task is only overdue starting the day AFTER its due date — not on the due date itself
+        if (task.dueDateTime) {
+          var dueDateOnly = new Date(task.dueDateTime);
+          dueDateOnly.setHours(0, 0, 0, 0);
+          var cutoffDateOnly = new Date(cutoff);
+          cutoffDateOnly.setHours(0, 0, 0, 0);
+          var wasOverdue = dueDateOnly < cutoffDateOnly;
+          reconstructed.taskOverdue = wasOverdue ? 'Overdue' : 'On Schedule';
+        }
+      }
+
+      return reconstructed;
+    }
+
+    function applyDateFilter(dateStr) {
+      if (!dateStr) {
+        CURRENT_DATA = TASK_DATA;
+        CURRENT_ASOF_DATE = null;
+        document.getElementById('filterNotice').style.display = 'none';
+      } else {
+        var cutoff = new Date(dateStr + 'T23:59:59');
+        CURRENT_DATA = TASK_DATA
+          .map(function(t) { return reconstructAsOf(t, cutoff); })
+          .filter(function(t) { return t !== null; });
+        CURRENT_ASOF_DATE = cutoff;
+
+        var notice = document.getElementById('filterNotice');
+        notice.textContent = 'Showing a reconstructed snapshot as of ' + new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' — task status, completion, overdue flags, and all date-relative charts are recalculated as of that date. Labels and categories always reflect current values.';
+        notice.style.display = 'block';
+      }
+      buildDash();
+      resizeDonuts();
+    }
+
+    function resizeDonuts() {
+      ['stateChart','catChart'].forEach(function(id) {
+        var canvas = document.getElementById(id);
+        if (canvas) {
+          canvas.style.width  = '190px';
+          canvas.style.height = '190px';
+          var chart = Chart.getChart(id);
+          if (chart) chart.resize(190, 190);
+        }
+      });
+    }
+
+    document.getElementById('asOfDate').addEventListener('change', function(e) {
+      applyDateFilter(e.target.value);
+    });
+    document.getElementById('resetDateBtn').addEventListener('click', function() {
+      document.getElementById('asOfDate').value = '';
+      applyDateFilter(null);
+    });
+
+    // --- Load data from the JSON that n8n commits to this repo ---
+    fetch('data/kpi_tasks.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(d) {
+        TASK_DATA = d.tasks || [];
+        LAST_UPDATED = d.updated;
+        CURRENT_DATA = TASK_DATA;
+        buildDash();
+        resizeDonuts();
+      })
+      .catch(function(err) {
+        document.getElementById('last-updated').textContent =
+          'Could not load data/kpi_tasks.json (' + err.message + ')';
+      });
+    // Force charts to re-render at correct print dimensions
+    window.addEventListener('beforeprint', function() {
+      var printSizes = {
+        'barChart':            { w: 900, h: 280 },
+        'stateChart':          { w: 190, h: 190 },
+        'catChart':            { w: 190, h: 190 },
+        'activeHoursChart':    { w: 180, h: 280 },
+        'completedHoursChart': { w: 560, h: 280 },
+        'avgDaysChart':        { w: 900, h: 180 },
+      };
+      Object.keys(printSizes).forEach(function(id) {
+        var chart = Chart.getChart(id);
+        if (chart) {
+          var s = printSizes[id];
+          // Tighten bottom padding for hours and avg days charts in print
+          if (id === 'activeHoursChart' || id === 'completedHoursChart') {
+            chart.options.layout.padding = 0;
+          }
+          if (id === 'avgDaysChart') {
+            chart.options.layout.padding = { top: 4, bottom: 0, left: 0, right: 0 };
+          }
+          chart.canvas.style.width  = s.w + 'px';
+          chart.canvas.style.height = s.h + 'px';
+          chart.resize(s.w, s.h);
+        }
+      });
+    });
+
+    window.addEventListener('afterprint', function() {
+      // Restore padding after printing
+      ['activeHoursChart', 'completedHoursChart'].forEach(function(id) {
+        var chart = Chart.getChart(id);
+        if (chart) {
+          chart.options.layout.padding = 0;
+          chart.canvas.style.width  = '';
+          chart.canvas.style.height = '';
+          chart.resize();
+        }
+      });
+      var avgChart = Chart.getChart('avgDaysChart');
+      if (avgChart) {
+        avgChart.options.layout.padding = { top: 4, bottom: 0, left: 0, right: 0 };
+        avgChart.canvas.style.width  = '';
+        avgChart.canvas.style.height = '';
+        avgChart.resize();
+      }
+      ['barChart', 'stateChart', 'catChart'].forEach(function(id) {
+        var chart = Chart.getChart(id);
+        if (chart) {
+          chart.canvas.style.width  = '';
+          chart.canvas.style.height = '';
+          chart.resize();
+        }
+      });
+    });
+
+
+  </script>
+</body>
+</html>
