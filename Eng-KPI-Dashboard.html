@@ -215,8 +215,14 @@
     // Dynamic state color palette
     const STATE_PALETTE = ["#378ADD","#D85A30","#1D9E75","#7F77DD","#BA7517","#888780","#E24B4A","#0F6E56"];
 
-    // Hours per task by category
-    const HOURS_MAP = {
+    const SPLIT_HOURS_START = new Date('2026-10-28T00:00:00');
+    
+    // Hours per task. Tasks created BEFORE the sub-task go-live are whole-stage tasks
+    // (full stage hours). Tasks created on/after it are sub-tasks: a stage's hours are
+    // split across its sub-tasks, with "draft" sub-tasks getting the larger share.
+    const SPLIT_HOURS_START = new Date('2026-10-28T00:00:00');   // set to the day sub-task creation goes live
+
+    const LEGACY_HOURS = {
       "Stage: Conceptual":  20,
       "Stage: 10% Design":  36,
       "Stage: 20% Design":  60,
@@ -224,8 +230,27 @@
       "Misc.":               8
     };
 
+    const SPLIT_HOURS = {                       // per sub-task
+      "Stage: Conceptual":  { draft: 14, other: 6 },    // template: 1 draft + 1 other  = 20
+      "Stage: 10% Design":  { draft: 18, other: 6 },    // template: 1 draft + 3 other  = 36
+      "Stage: 20% Design":  { draft: 36, other: 12 },   // template: 1 draft + 2 other  = 60
+      "Stage: 30% Design":  { draft: 20, other: 13 },   // template: 0 draft + 6 other  = 78
+      "Misc.":              { draft: 8,  other: 8 }
+    };
+
+    // A sub-task counts as "draft" if its NAME (the part after "STATE Project - ") contains "draft"
+    function isDraftTask(task) {
+      const name = String(task.title || '').split(' - ').slice(1).join(' - ');
+      return /draft/i.test(name);
+    }
+
     function getHours(task) {
-      return HOURS_MAP[getCategory(task)] || 8;
+      const cat = getCategory(task);
+      if (!task.createdDateTime || new Date(task.createdDateTime) < SPLIT_HOURS_START) {
+        return LEGACY_HOURS[cat] || 8;
+      }
+      const h = SPLIT_HOURS[cat] || SPLIT_HOURS["Misc."];
+      return isDraftTask(task) ? h.draft : h.other;
     }
 
     // Resolve category from labels array — find first "Stage:..." label, else Misc.
